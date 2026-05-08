@@ -29,8 +29,7 @@ public class App
         /**
          * Initialize connector to talk with server
          */
-        try {           
-
+        
             JSONObject hello = new JSONObject();
             hello.put("type", "hello");
             hello.put("message", connector.computerId);
@@ -41,15 +40,14 @@ public class App
             System.out.println("[Connector] Received Message: " + instruction);
             System.out.println("[Connector] Beginning of Communication");
 
-        } catch (Exception e) {
-            System.err.println("[Connector] Error Initalizing communication: " + e.getMessage());
-        }
+        
 
         TaskManager manager = new TaskManager();
         ServiceManager service = new ServiceManager();
         int codeAction = 0;
         JSONObject jsonBuilder = new JSONObject();
-        try {
+
+        
             //TODO: Startign here:
             while (codeAction != 3) {
                 jsonBuilder.clear();
@@ -62,13 +60,11 @@ public class App
                 // Do action
                 codeAction = 3;
             }
-        } catch (Exception e) {
-            System.err.println("[Connector] Error during communication: " + e.getMessage());
-        }finally{
+
             service.end();
             manager.shutdown();
             System.out.println("[Connector] Communication Ended");
-        }
+
 
 
 
