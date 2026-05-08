@@ -2,19 +2,17 @@ import time
 import json
 import re
 import sqlite3
-from flask import Flask, request, jsonify, render_template, g
+from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
-
 DATABASE = 'metadata.db'
 
-# Global variables
-pending_instructions = None
+instruction_queue = []
 last_result = None
-current_computer_id = None
+current_computer_id = None   # still used for metadata
 
 # ----------------------------------------------------------------------
-# Database helpers
+# Database helpers (unchanged)
 # ----------------------------------------------------------------------
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -22,7 +20,6 @@ def get_db():
     return conn
 
 def init_db():
-    """Drop all tables and recreate them."""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("DROP TABLE IF EXISTS all_collectors")
@@ -89,6 +86,14 @@ def save_task_id(task_id, computer_id):
     finally:
         conn.close()
 
+def delete_task_id(task_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM all_taskid WHERE task_id = ?", (task_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
 def get_all_metadata():
     conn = get_db()
     try:
@@ -116,7 +121,7 @@ def get_all_metadata():
         conn.close()
 
 # ----------------------------------------------------------------------
-# Metadata parsing
+# Metadata parsing (unchanged)
 # ----------------------------------------------------------------------
 def parse_parameters_from_string(params_str):
     if not params_str or params_str.strip() == "[]":
@@ -175,28 +180,34 @@ def index():
 # ------------ Public / web connector ------------
 @app.route("/api/send_instruction", methods=["POST"])
 def send_instruction():
-    """Generic instruction (kept for backwards compatibility)."""
-    global pending_instructions
     data = request.get_json()
-    message = data.get("message")
-    if message is None:
-        return jsonify({"type": "error", "message": "message cannot be null"}), 400
-    pending_instructions = {"type": "instruction", "message": message}
-    print("[INSTRUCTION STORED]", pending_instructions)
+    computer_id = data.get("computer_id")
+    message = data.get("message", "STOP_MACHINE")
+
+    if computer_id is None:
+        return jsonify({"type": "error", "message": "computer_id required"}), 400
+
+    instruction = {
+        "type": "instruction",
+        "message": message,
+        "target_computer_id": int(computer_id)  # ensure int
+    }
+    instruction_queue.append(instruction)
+    print(f"[INSTRUCTION STORED] {instruction}")
     return jsonify({"type": "status", "message": "sent"})
 
 @app.route("/api/send_instruction_add_task", methods=["POST"])
 def send_add_task():
-    """Queue a new task creation instruction."""
-    global pending_instructions
     data = request.get_json()
-    # Expects: { "name": ..., "parameters": [...], "cron": "...", "group": "...", "dispatcher": "..." }
+    computer_id = data.get("computer_id")
     name = data.get("name")
     parameters = data.get("parameters", [])
-    cron = data.get("cron", "*/5 * * * * ?")        # default cron if missing
+    cron = data.get("cron", "* * * * * ?")
     group = data.get("group", "default")
     dispatcher = data.get("dispatcher", "rabbitmq")
 
+    if not computer_id:
+        return jsonify({"type": "error", "message": "computer_id required"}), 400
     if not name:
         return jsonify({"type": "error", "message": "task name required"}), 400
 
@@ -208,27 +219,31 @@ def send_add_task():
             "cron-value": cron,
             "group": group,
             "dispatcher": dispatcher
-        }]
+        }],
+        "target_computer_id": int(computer_id)
     }
-    pending_instructions = instruction
-    print("[ADD TASK INSTRUCTION STORED]", instruction)
+    instruction_queue.append(instruction)
+    print(f"[ADD TASK INSTRUCTION STORED] {instruction}")
     return jsonify({"type": "status", "message": "add_task_queued"})
 
 @app.route("/api/send_instruction_del_task", methods=["POST"])
 def send_del_task():
-    """Queue a task deletion instruction."""
-    global pending_instructions
     data = request.get_json()
+    computer_id = data.get("computer_id")
     task_id = data.get("task_id")
+
+    if not computer_id:
+        return jsonify({"type": "error", "message": "computer_id required"}), 400
     if not task_id:
         return jsonify({"type": "error", "message": "task_id required"}), 400
 
     instruction = {
         "type": "instruction_del_task",
-        "message": task_id
+        "message": task_id,
+        "target_computer_id": int(computer_id)
     }
-    pending_instructions = instruction
-    print("[DEL TASK INSTRUCTION STORED]", instruction)
+    instruction_queue.append(instruction)
+    print(f"[DEL TASK INSTRUCTION STORED] {instruction}")
     return jsonify({"type": "status", "message": "del_task_queued"})
 
 @app.route("/api/get_result", methods=["GET"])
@@ -241,15 +256,45 @@ def get_result():
     return jsonify(result)
 
 # ------------ Java connector polling ------------
-@app.route("/api/get_instruction", methods=["GET"])
+@app.route("/api/get_instruction", methods=["GET", "POST"])
 def get_instruction():
-    global pending_instructions
+    """
+    Accepts computer_id either in JSON body (POST or GET with body)
+    or as a query parameter ?computer_id=123.
+    Returns first queued instruction matching that computer.
+    """
+    # 1. Try JSON body
+    data = request.get_json(silent=True)
+    computer_id_str = None
+
+    if data is not None:
+        if data.get("type") == "computer_id":
+            computer_id_str = data.get("message")   # client sends string
+        else:
+            computer_id_str = data.get("computer_id")
+
+    # 2. Fallback: query parameter
+    if computer_id_str is None:
+        computer_id_str = request.args.get("computer_id")
+
+    if computer_id_str is None:
+        return jsonify({"type": "error", "message": "computer_id missing"}), 400
+
+    try:
+        computer_id = int(computer_id_str)
+    except (ValueError, TypeError):
+        return jsonify({"type": "error", "message": "computer_id must be numeric"}), 400
+
+    # Long-poll (30 seconds)
     for _ in range(60):
-        if pending_instructions is not None:
-            temp = pending_instructions
-            pending_instructions = None
-            return jsonify(temp)
-        time.sleep(0.5)
+        for idx, instr in enumerate(instruction_queue):
+            if instr.get("target_computer_id") == computer_id:
+                dispatched = instruction_queue.pop(idx)
+                print(f"[INSTRUCTION DISPATCHED] {dispatched}")
+                response = {k: v for k, v in dispatched.items() if k != "target_computer_id"}
+                return jsonify(response)
+        time.sleep(0.1)
+
     return jsonify({"type": "status", "message": None})
 
 @app.route("/api/submit_result", methods=["POST"])
@@ -266,7 +311,10 @@ def metadata():
     global current_computer_id
     data = request.get_json()
     if current_computer_id is None:
-        return jsonify({"type": "error", "message": "No computer registered. Send /api/hello first."}), 400
+        return jsonify({
+            "type": "error",
+            "message": "No computer registered. Send /api/hello first."
+        }), 400
     collectors = data.get("messagge", data.get("message", []))
     if not isinstance(collectors, list) or not collectors:
         return jsonify({"type": "error", "message": "Invalid or empty metadata"}), 400
@@ -289,21 +337,30 @@ def get_metadata():
     all_data = get_all_metadata()
     return jsonify({"type": "metadata", "data": all_data})
 
-# ------------ Task reporting from Java client ------------
+# ------------ Task reporting ------------
 @app.route("/api/task_created", methods=["POST"])
 def task_created():
-    """Java client reports a newly created task ID."""
     data = request.get_json()
     task_id = data.get("task_id")
     computer_id = data.get("computer_id")
     if not task_id or not computer_id:
         return jsonify({"type": "error", "message": "task_id and computer_id required"}), 400
-
-    save_task_id(task_id, computer_id)
+    save_task_id(task_id, int(computer_id))
     print(f"[TASK STORED] task_id={task_id}, computer_id={computer_id}")
     return jsonify({"type": "status", "message": "task_stored"})
 
-# ------------ Hello / registration ------------
+@app.route("/api/task_deleted", methods=["POST"])
+def task_deleted():
+    data = request.get_json()
+    task_id = data.get("task_id")
+    computer_id = data.get("computer_id")
+    if not task_id:
+        return jsonify({"type": "error", "message": "task_id required"}), 400
+    delete_task_id(task_id)
+    print(f"[TASK DELETED] task_id={task_id}, computer_id={computer_id}")
+    return jsonify({"type": "status", "message": "task_removed"})
+
+# ------------ Hello (now returns numeric computer_id) ------------
 @app.route("/api/hello", methods=["POST"])
 def hello():
     global current_computer_id
@@ -315,7 +372,11 @@ def hello():
     computer_id = save_computer(computer_name)
     current_computer_id = computer_id
     print(f"[HELLO] Computer {computer_name} registered with ID {computer_id}")
-    return jsonify({"type": "hello", "message": "Hello-From-Server"})
+    return jsonify({
+        "type": "hello",
+        "message": "Hello-From-Server",
+        "computer_id": computer_id          # <-- now the client can read this
+    })
 
 if __name__ == "__main__":
     init_db()

@@ -34,18 +34,23 @@ public class App
          * Initialize connector to talk with server
          */
         
-        JSONObject hello = new JSONObject();
-        hello.put("type", "hello");
-        hello.put("message", connector.computerId);
+        JSONObject helloJson = new JSONObject();
+        
+        helloJson.put("type", "hello");
+        helloJson.put("message", connector.computerId);
+        JSONObject helloResponse = connector.POST(helloJson, "/api/hello");
+        
         // Sends Hello request to server with computerID
         //System.out.println("[Connector] Hello sent for ID: " + connector.computerId);
 
-        JSONObject instruction  = connector.POST(hello, "/api/hello");
+        JSONObject instruction  = connector.POST(helloJson, "/api/hello");
         if(instruction.get("type")==null){
             System.err.println("[!] No server Online found");
             return;
         }
-
+        
+        System.out.println(instruction.toJSONString());
+        long computerId = (long) helloResponse.get("computer_id");
         System.out.println("[+] Received Message: " + instruction);
 
 
@@ -69,80 +74,138 @@ public class App
 
         //TODO: Startign here:
         while (!exit) {
-            jsonBuilder.clear();
-            jsonBuilder.put("type", "computer_id");
-            jsonBuilder.put("message", connector.computerId);
-        
-            JSONObject jsonMessage = connector.GET(jsonBuilder, "/api/get_instruction");
+
+        // No JSON body needed – pass computerId as query string
+        //JSONObject jsonMessage = connector.GET(null, "/api/get_instruction?computer_id=" + computerId);
+        JSONObject dummy = new JSONObject();
+        JSONObject jsonMessage = connector.GET(dummy, "/api/get_instruction?computer_id=" + computerId);
+
+       // JSONObject jsonMessage = connector.GET(jsonBuilder, "/api/get_instruction");
+
+        if (jsonMessage != null) {
             System.out.println(jsonMessage.toJSONString());
-        
-            if (jsonMessage != null && jsonMessage.containsKey("type")) {
+
+            if (jsonMessage.containsKey("type")
+                    && jsonMessage.get("type") != null) {
+
                 String type = String.valueOf(jsonMessage.get("type"));
-        
+
                 if ("instruction_add_task".equals(type)) {
-                    JSONArray tasksArray = (JSONArray) jsonMessage.get("message");
-        
+
+                    JSONArray tasksArray =
+                            (JSONArray) jsonMessage.get("message");
+
                     if (tasksArray != null) {
+
                         for (int i = 0; i < tasksArray.size(); i++) {
-                            JSONObject taskDef = (JSONObject) tasksArray.get(i);
-        
-                            String name = String.valueOf(taskDef.get("name"));
-                            JSONArray params = (JSONArray) taskDef.get("parameters");
-        
-                            Map<String, Object> paramMap = new HashMap<>();
+
+                            JSONObject taskDef =
+                                    (JSONObject) tasksArray.get(i);
+
+                            String name =
+                                    String.valueOf(taskDef.get("name"));
+
+                            JSONArray params =
+                                    (JSONArray) taskDef.get("parameters");
+
+                            Map<String, Object> paramMap =
+                                    new HashMap<>();
+
                             if (params != null) {
+
                                 for (int j = 0; j < params.size(); j++) {
-                                    JSONObject p = (JSONObject) params.get(j);
-                                    String key = String.valueOf(p.get("key"));
+
+                                    JSONObject p =
+                                            (JSONObject) params.get(j);
+
+                                    String key =
+                                            String.valueOf(p.get("key"));
+
                                     Object value = p.get("value");
+
                                     paramMap.put(key, value);
                                 }
                             }
-        
-                            String cron = taskDef.get("cron-value") != null
+
+                            String cron =
+                                    taskDef.get("cron-value") != null
                                     ? String.valueOf(taskDef.get("cron-value"))
-                                    : "*/5 * * * *";
-        
-                            String group = taskDef.get("group") != null
+                                    : "* * * * * ?";
+
+                            String group =
+                                    taskDef.get("group") != null
                                     ? String.valueOf(taskDef.get("group"))
                                     : "default";
-        
-                            String dispatcher = taskDef.get("dispatcher") != null
+
+                            String dispatcher =
+                                    taskDef.get("dispatcher") != null
                                     ? String.valueOf(taskDef.get("dispatcher"))
                                     : "rabbitmq";
-        
+
                             String taskId = manager.createTask(
-                                    new TaskModel(name, paramMap, cron, group, dispatcher)
+                                    new TaskModel(
+                                            name,
+                                            paramMap,
+                                            cron,
+                                            group,
+                                            dispatcher
+                                    )
                             );
-        
+
                             JSONObject report = new JSONObject();
                             report.put("task_id", taskId);
-                            report.put("computer_id", connector.computerId);
-        
+                            report.put("computer_id", computerId);
+
                             connector.POST(report, "/api/task_created");
                         }
                     }
-        
+
                 } else if ("instruction_del_task".equals(type)) {
-                    String taskId = String.valueOf(jsonMessage.get("message"));
-                    boolean deleted = manager.deleteTask(taskId, "system");
-        
-                    if (!deleted) {
-                        System.err.println("Failed to delete task: " + taskId);
+
+                    String taskId =
+                            String.valueOf(jsonMessage.get("message"));
+
+                    boolean deleted =
+                            manager.deleteTask(taskId, "system");
+
+                    if (deleted) {
+
+                        JSONObject deletionReport = new JSONObject();
+
+                        deletionReport.put("task_id", taskId);
+                        deletionReport.put("computer_id", computerId);
+
+                        connector.POST(
+                                deletionReport,
+                                "/api/task_deleted"
+                        );
+
+                    } else {
+
+                        System.err.println(
+                                "Failed to delete task: " + taskId
+                        );
                     }
-        
+
                 } else if ("instruction".equals(type)) {
-                    String msg = String.valueOf(jsonMessage.get("message"));
-        
+
+                    String msg =
+                            String.valueOf(jsonMessage.get("message"));
+
                     if ("STOP_MACHINE".equals(msg)) {
+
                         exit = true;
-                        System.out.println("Received STOP_MACHINE. Exiting.");
+
+                        System.out.println(
+                                "Received STOP_MACHINE. Exiting."
+                        );
                     }
                 }
             }
-            // Small sleep to prevent tight polling when no instruction
-            //Thread.sleep(500);
         }
+
+        //Thread.sleep(500);
+    }
 
         service.end();
         manager.shutdown();
