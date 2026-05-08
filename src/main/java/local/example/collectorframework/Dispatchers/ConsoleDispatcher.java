@@ -1,4 +1,4 @@
-package local.example.collectorframework;
+package local.example.collectorframework.Dispatchers;
 
 // IMPORTS API
 import io.github.xseejx.collectorframework.api.CollectorResult;

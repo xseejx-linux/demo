@@ -1,4 +1,4 @@
-package local.example.collectorframework;
+package local.example.collectorframework.Dispatchers;
 
 import java.io.OutputStream;
 import java.net.Socket;
