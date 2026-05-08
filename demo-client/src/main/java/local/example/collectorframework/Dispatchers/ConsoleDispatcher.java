@@ -16,7 +16,7 @@ import com.google.auto.service.AutoService;
  */
 @AutoService(ResultDispatcher.class)
 @DispatcherMetadata(name = "console", description = "Prints task results to the console")
-//TODO: move inside package dispatcher
+
 public class ConsoleDispatcher implements ResultDispatcher {
 
     @SuppressWarnings("unchecked")

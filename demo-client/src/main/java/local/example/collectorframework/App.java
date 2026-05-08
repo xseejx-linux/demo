@@ -1,10 +1,14 @@
 package local.example.collectorframework;
 
+import java.io.IOException;
 import java.util.Map;
+
+import org.json.simple.JSONObject;
 
 import io.github.xseejx.collectorframework.engine.ServiceManager;
 import io.github.xseejx.collectorframework.engine.TaskManager;
 import io.github.xseejx.collectorframework.engine.TaskModel;
+import local.example.collectorframework.connectors.Connector;
 
 
 
@@ -17,19 +21,61 @@ public class App
 {
     // Init Thread for Runnable class Connector (Main Connector Thread)
     // Executes a first service with a collector which will return arguments to pass to the server. (Only if server is avaible)
-    //
     public static void main( String[] args )
     {
+        Connector connector = new Connector("Test");;
+
+        
+        /**
+         * Initialize connector to talk with server
+         */
+        try {           
+
+            JSONObject hello = new JSONObject();
+            hello.put("type", "hello");
+            hello.put("message", connector.computerId);
+            // Sends Hello request to server with computerID
+            System.out.println("[Connector] Hello sent for ID: " + connector.computerId);
+
+            JSONObject instruction  = connector.POST(hello, "/api/hello");
+            System.out.println("[Connector] Received Message: " + instruction);
+            System.out.println("[Connector] Beginning of Communication");
+
+        } catch (Exception e) {
+            System.err.println("[Connector] Error Initalizing communication: " + e.getMessage());
+        }
+
         TaskManager manager = new TaskManager();
         ServiceManager service = new ServiceManager();
+        int codeAction = 0;
+        JSONObject jsonBuilder = new JSONObject();
+        try {
+            //TODO: Startign here:
+            while (codeAction != 3) {
+                jsonBuilder.clear();
+                jsonBuilder.put("type", "computer_id");
+                jsonBuilder.put("message", connector.computerId);
 
-        //waitResponse() (IT STOPS MAIN)
-        //FIRST EXECUTION AFTER CONNECTOR ESTABLISHED A CONNECTION WITH A SERVER (uses waitResponse() IT STOPS MAIN)
+                // Get instructions 
+                JSONObject jsonMessage = connector.GET(jsonBuilder, "/api/get_instruction");
+                System.out.println(jsonMessage.toJSONString());
+                // Do action
+                codeAction = 3;
+            }
+        } catch (Exception e) {
+            System.err.println("[Connector] Error during communication: " + e.getMessage());
+        }finally{
+            service.end();
+            manager.shutdown();
+            System.out.println("[Connector] Communication Ended");
+        }
+
+
+
+
+
         
-        String result = service.activateServiceSync(
-            "generic.test", //TODO: Make collector for retrive infos about host
-            Map.of()
-        );
+
         //NEXT OPERATION SEQUENTIALLY
         //sends result to server -> send()
         //Waits confirm
@@ -60,7 +106,9 @@ public class App
 
 
 
-
+        
+        
+        
 
 
 
@@ -68,7 +116,7 @@ public class App
 
         
 
-        String task = manager.createTask(new TaskModel(
+        /*String task = manager.createTask(new TaskModel(
             "generic.test",
             Map.of("value1", true, "value2", "Second"),
             "* * * * * ?",
@@ -81,24 +129,16 @@ public class App
             "* * * * * ?",
             "system",
             "rabbitmq"
-        ));
+        ));*/
 
         
 
         //System.out.println("Deleting task: " + task);
         //boolean deleted = manager.deleteTask(task, "system");
         //System.out.println("Delete result: " + deleted);
-        try {
-            while (true) {
-                
-                Thread.sleep(1000);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
 
 
-        service.end();
-        manager.shutdown();    
+
+            
     }
 }

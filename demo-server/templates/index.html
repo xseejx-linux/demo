@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Controller</title>
+</head>
+<body>
+
+<h1>Java Controller</h1>
+
+<button onclick="sendInstruction()">
+    Send Instruction
+</button>
+
+<p id="status"></p>
+
+<script>
+
+async function sendInstruction() {
+
+    document.getElementById("status")
+        .innerText = "Waiting for Java...";
+
+    // send command
+    await fetch("/api/send_instruction", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            message: "test"
+        })
+    });
+
+    waitForResult();
+}
+
+
+async function waitForResult() {
+
+    const interval = setInterval(async () => {
+
+        const response =
+            await fetch("/api/get_result");
+
+        const data =
+            await response.json();
+
+        if (data.result != null) {
+
+            clearInterval(interval);
+
+            document.getElementById("status")
+                .innerText =
+                "Java replied: "
+                + data.result;
+        }
+
+    }, 1000);
+}
+
+</script>
+
+</body>
+</html>

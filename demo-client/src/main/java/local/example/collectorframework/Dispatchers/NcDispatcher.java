@@ -14,7 +14,9 @@ import io.github.xseejx.collectorframework.api.ResultDispatcher;
 @DispatcherMetadata(name = "ncdispatcher", description = "NC dispatcher")
 public class NcDispatcher implements ResultDispatcher {
 
+    @SuppressWarnings("unused")
     private final String host="127.0.0.1";
+    @SuppressWarnings("unused")
     private final int port=8080;
 
 

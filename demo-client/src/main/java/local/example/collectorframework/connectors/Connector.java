@@ -4,121 +4,114 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-import java.io.*;
-import java.net.Socket;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 
-public class Connector implements Runnable {
+public class Connector {
 
-    private final static String SERVER_IP = "localhost";
-    private final static int SERVER_PORT = 8979;
+    private static final String SERVER_URL ="http://localhost:8979";
 
-    private final String computerId;
-    private Socket socket;
-    private PrintWriter out;
-    private BufferedReader in;
-    private volatile boolean running = true;
+    public final String computerId;
 
-    /**
-     * Constructor that accepts the computer ID (passed via arguments).
-     *
-     * @param computerId Unique identifier of this computer/node.
-     */
+    private final HttpClient client;
+
     public Connector(String computerId) {
         this.computerId = computerId;
+        this.client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
     }
 
-    /**
-     * Sends a JSON message to the server.
-     *
-     * @param jsonMessage A JSON string to send.
-     * @throws IOException if an I/O error occurs.
-     */
-    public void send(String jsonMessage) throws IOException {
-        if (out == null) {
-            throw new IOException("Output stream not initialized. Connection may not be established.");
-        }
-        out.println(jsonMessage);
-        out.flush();
-    }
+    
 
-    /**
-     * Waits for and reads the next JSON response from the server.
-     *
-     * @return JSONObject representing the server's message.
-     * @throws IOException if reading fails or stream is closed.
-     * @throws ParseException 
-     * @throws org.json.JSONException if the received data is not valid JSON.
-     */
-    public JSONObject waitResponse() throws IOException, ParseException  {
-        String jsonLine = in.readLine();
-        if (jsonLine == null) {
-            throw new IOException("Connection closed by server.");
-        }
-        JSONParser parser = new JSONParser();
-        return (JSONObject) parser.parse(jsonLine);
-    }
 
-    @Override
-    public void run() {
+
+    public JSONObject GET(JSONObject jsonBuilder, String endpoint) {
         try {
-            // 1. Create TCP socket to server
-            socket = new Socket(SERVER_IP, SERVER_PORT);
-            out = new PrintWriter(socket.getOutputStream(), true);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            String url = SERVER_URL + endpoint;
 
-            // 2. Send hello message with computer ID
-            JSONObject hello = new JSONObject();
-            hello.put("type", "hello");
-            hello.put("computerId", computerId);
-            send(hello.toString());
-            System.out.println("[Connector] Hello sent for ID: " + computerId);
-
-            // 3. Continuously wait for and process server instructions
-            while (running) {
-                JSONObject instruction = waitResponse();
-                System.out.println("[Connector] Received instruction: " + instruction);
-
-                // Example: respond to a "ping" message or any other custom handling
-                if (instruction.containsKey("command")) {
-                    String cmd = (String) instruction.get("command");
-                    if ("shutdown".equalsIgnoreCase(cmd)) {
-                        System.out.println("[Connector] Shutdown command received. Stopping.");
-                        break;
+            if (jsonBuilder != null && !jsonBuilder.isEmpty()) {
+                StringBuilder params = new StringBuilder("?");
+                for (Object key : jsonBuilder.keySet()) {
+                    if (params.length() > 1) {
+                        params.append("&");
                     }
-                    // Add more command handling as needed
+                    params.append(key.toString())
+                            .append("=")
+                            .append(jsonBuilder.get(key).toString());
                 }
+                url += params.toString();
             }
-        } catch (Exception e) {
-            System.err.println("[Connector] Error in communication: " + e.getMessage());
-        } finally {
-            stop();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = client.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+            if (response.statusCode() != 200) {
+                JSONObject status = new JSONObject();
+                status.put("type", "status");
+                status.put("status", response.statusCode());
+                return status;
+            }
+
+            JSONParser parser = new JSONParser();
+
+            return (JSONObject) parser.parse(response.body());
+
+        } catch (IOException | InterruptedException | ParseException e) {
+            e.printStackTrace();
+            JSONObject status = new JSONObject();
+            status.put("type", null);
+            return status;
         }
     }
 
     /**
-     * Gracefully stops the connector and closes all resources.
+     * POST JSON to Flask and receives JSON response.
+     * @throws InterruptedException 
+     * @throws IOException 
+     * @throws ParseException 
      */
-    public void stop() {
-        running = false;
-        try {
-            if (in != null) in.close();
-            if (out != null) out.close();
-            if (socket != null) socket.close();
-        } catch (IOException e) {
-            System.err.println("[Connector] Error closing resources: " + e.getMessage());
-        }
-    }
+    public JSONObject POST(JSONObject message, String endpoint) {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(SERVER_URL + endpoint))
+                .timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(message.toString()))
+                .build();
 
-    // ------------------------------------------------------------------------
-    // Example usage (can be removed in production)
-    // ------------------------------------------------------------------------
-    public static void main(String[] args) {
-        /*if (args.length < 1) {
-            System.out.println("Usage: java Connector <computer-id>");
-            return;
-        }*/
-        Connector connector = new Connector("Test");
-        new Thread(connector).start();
-        System.out.println("Stopped");
+        HttpResponse<String> response;
+        try {
+            JSONParser parser = new JSONParser();
+            response = client.send(
+                            request,
+                            HttpResponse.BodyHandlers.ofString()
+                        );
+            
+            if (response.statusCode() != 200) {
+                JSONObject status = new JSONObject();
+                status.put("type", "status");
+                status.put("status", response.statusCode());
+                return status;
+            }
+            return (JSONObject)parser.parse(response.body());
+        } catch (IOException | InterruptedException | ParseException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            JSONObject status = new JSONObject();
+            status.put("type", null);
+            return status;
+        }
+
     }
+    
+
 }
