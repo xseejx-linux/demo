@@ -1,0 +1,56 @@
+# TEMPLATE .gitignore Maven Java Project
+# @author seej
+# @version 1.0
+# @since 2026-05-02
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.backup
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE - VSCode
+.vscode/settings.json
+*.code-workspace
+
+# IDE - Eclipse
+.classpath
+.project
+.settings/
+*.launch
+
+# IDE - IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Compiler
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Java
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Build
+build/
+dist/

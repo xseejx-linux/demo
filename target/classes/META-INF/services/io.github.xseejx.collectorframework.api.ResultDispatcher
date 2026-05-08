@@ -1,3 +1,2 @@
 local.example.collectorframework.ConsoleDispatcher
 local.example.collectorframework.NcDispatcher
-local.example.collectorframework.RabbitDispatcher
