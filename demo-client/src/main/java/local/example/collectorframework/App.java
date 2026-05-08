@@ -1,6 +1,7 @@
 package local.example.collectorframework;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -71,19 +72,83 @@ public class App
             jsonBuilder.clear();
             jsonBuilder.put("type", "computer_id");
             jsonBuilder.put("message", connector.computerId);
-
-            // Get instructions 
+        
             JSONObject jsonMessage = connector.GET(jsonBuilder, "/api/get_instruction");
             System.out.println(jsonMessage.toJSONString());
-            // Do action
-            exit = true;
+        
+            if (jsonMessage != null && jsonMessage.containsKey("type")) {
+                String type = String.valueOf(jsonMessage.get("type"));
+        
+                if ("instruction_add_task".equals(type)) {
+                    JSONArray tasksArray = (JSONArray) jsonMessage.get("message");
+        
+                    if (tasksArray != null) {
+                        for (int i = 0; i < tasksArray.size(); i++) {
+                            JSONObject taskDef = (JSONObject) tasksArray.get(i);
+        
+                            String name = String.valueOf(taskDef.get("name"));
+                            JSONArray params = (JSONArray) taskDef.get("parameters");
+        
+                            Map<String, Object> paramMap = new HashMap<>();
+                            if (params != null) {
+                                for (int j = 0; j < params.size(); j++) {
+                                    JSONObject p = (JSONObject) params.get(j);
+                                    String key = String.valueOf(p.get("key"));
+                                    Object value = p.get("value");
+                                    paramMap.put(key, value);
+                                }
+                            }
+        
+                            String cron = taskDef.get("cron-value") != null
+                                    ? String.valueOf(taskDef.get("cron-value"))
+                                    : "*/5 * * * *";
+        
+                            String group = taskDef.get("group") != null
+                                    ? String.valueOf(taskDef.get("group"))
+                                    : "default";
+        
+                            String dispatcher = taskDef.get("dispatcher") != null
+                                    ? String.valueOf(taskDef.get("dispatcher"))
+                                    : "rabbitmq";
+        
+                            String taskId = manager.createTask(
+                                    new TaskModel(name, paramMap, cron, group, dispatcher)
+                            );
+        
+                            JSONObject report = new JSONObject();
+                            report.put("task_id", taskId);
+                            report.put("computer_id", connector.computerId);
+        
+                            connector.POST(report, "/api/task_created");
+                        }
+                    }
+        
+                } else if ("instruction_del_task".equals(type)) {
+                    String taskId = String.valueOf(jsonMessage.get("message"));
+                    boolean deleted = manager.deleteTask(taskId, "system");
+        
+                    if (!deleted) {
+                        System.err.println("Failed to delete task: " + taskId);
+                    }
+        
+                } else if ("instruction".equals(type)) {
+                    String msg = String.valueOf(jsonMessage.get("message"));
+        
+                    if ("STOP_MACHINE".equals(msg)) {
+                        exit = true;
+                        System.out.println("Received STOP_MACHINE. Exiting.");
+                    }
+                }
+            }
+            // Small sleep to prevent tight polling when no instruction
+            //Thread.sleep(500);
         }
 
         service.end();
         manager.shutdown();
         System.out.println("[Connector] Communication Ended");
 
-
+        
 
 
 
@@ -106,16 +171,16 @@ public class App
         
         
 
-        /*String task = tasks.createTask(
+        /*String task = manager.createTask(
             new TaskModel(
                 "generic.test",
                 Map.of("value1", true),
                 "* * * * * ?",
-                "system"    // Group
-                "rabbidmq" // dispatcher selection
+                "system",   // Group
+                "rabbitmq" // dispatcher selection
             )
         );
-        System.out.println("TASK CREATED: " + taskId);*/
+        System.out.println("TASK CREATED: " + task);*/
 
 
 
