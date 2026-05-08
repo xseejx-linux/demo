@@ -21,8 +21,8 @@ public class RabbitDispatcher implements ResultDispatcher, AutoCloseable {
     private static final String EXCHANGE_TYPE = "direct";
     ConnectionFactory factory = new ConnectionFactory();
 
-    private final Connection connection;
-    private final Channel channel;
+    private static Connection connection;
+    private static Channel channel;
 
     public RabbitDispatcher() {
         try {
@@ -31,15 +31,42 @@ public class RabbitDispatcher implements ResultDispatcher, AutoCloseable {
             factory.setUsername("guest");
             factory.setPassword("guest");
             
-
-            this.connection = factory.newConnection();
-            this.channel = connection.createChannel();
+            createConnection(factory);
+            createChannel();
+            //this.connection = factory.newConnection();
+            //this.channel = connection.createChannel();
 
             // Declare once, not on every dispatch
-            this.channel.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, true);
-        } catch (IOException | TimeoutException e) {
+            channel.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, true);
+        } catch (IOException e) {
             throw new RuntimeException("Failed to connect to RabbitMQ", e);
         }
+    }
+
+    private static void createConnection(ConnectionFactory factory){
+        if(RabbitDispatcher.connection == null){
+            try {
+                RabbitDispatcher.connection = factory.newConnection();
+            } catch (Exception e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            };
+        }
+        return;
+    }
+
+    private static void createChannel(){
+        if(RabbitDispatcher.connection == null)
+            return;
+        if(RabbitDispatcher.channel!=null)
+            return;
+        try {
+            RabbitDispatcher.channel = RabbitDispatcher.connection.createChannel();
+        } catch (Exception e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        };
+        return;
     }
 
     @SuppressWarnings("unchecked")

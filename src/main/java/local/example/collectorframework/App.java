@@ -10,86 +10,95 @@ import io.github.xseejx.collectorframework.engine.TaskModel;
 
 
 /**
- * Hello world!
+ * 
  *
  */
 public class App 
 {
+    // Init Thread for Runnable class Connector (Main Connector Thread)
+    // Executes a first service with a collector which will return arguments to pass to the server. (Only if server is avaible)
+    //
     public static void main( String[] args )
     {
-        /*// ── Normal service execution ─────────────────────────────
+        TaskManager manager = new TaskManager();
         ServiceManager service = new ServiceManager();
 
+        //waitResponse() (IT STOPS MAIN)
+        //FIRST EXECUTION AFTER CONNECTOR ESTABLISHED A CONNECTION WITH A SERVER (uses waitResponse() IT STOPS MAIN)
+        
         String result = service.activateServiceSync(
-            "generic.test",
+            "generic.test", //TODO: Make collector for retrive infos about host
             Map.of()
         );
+        //NEXT OPERATION SEQUENTIALLY
+        //sends result to server -> send()
+        //Waits confirm
+        //ENTERS WHILE LOOP
+        //Wait + recive instructions from server -> waitResponse()
+        //switch for applying operations
 
-        System.out.println("SERVICE RESULT: " + result);
+        /*
+        The operations (basics):
+            1: create a task -> of collector, of dispatcher     <- returns taskID 
+            2: destroy a task -> of taskID <- returns status of request (e.g true/false) 
+            3: Stop everything //exits from loop, and stop everything
+        */
+        
+        
 
-        CollectorEngine engine = new CollectorEngine(new CollectorRegistry());*/
-        // ── Task scheduling test ────────────────────────────────
-        //TaskManager tasks = new TaskManager();
-
-        /*String taskId = tasks.createTask(
+        /*String task = tasks.createTask(
             new TaskModel(
                 "generic.test",
                 Map.of("value1", true),
                 "* * * * * ?",
-                "terminal" // dispatcher selection
+                "system"    // Group
+                "rabbidmq" // dispatcher selection
             )
         );
         System.out.println("TASK CREATED: " + taskId);*/
 
-        /*try {
-            //Thread.sleep(15000); // let scheduler run
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }**/
-
-        //tasks.shutdown();
-        //service.end();
 
 
-        TaskManager manager = new TaskManager();
 
-        //System.out.println("Creating two scheduled tasks, one using ConsoleDispatcher and one using RabbitMQ dispatcher...");
 
-        /*String task1 = manager.createTask(new TaskModel(
+
+
+
+
+
+        
+
+        String task = manager.createTask(new TaskModel(
             "generic.test",
-            Map.of("value1", true, "value2", "Console run"),
-            "system",
-            "console"
-        ));*/
-        String task1 = "<null>";
-        //System.out.println(manager.listAvailable());
-        String task2 = manager.createTask(new TaskModel(
-            "generic.test",
-            Map.of("value1", true, "value2", "NC run"),
+            Map.of("value1", true, "value2", "Second"),
             "* * * * * ?",
             "system",
-            "console"
+            "rabbitmq"
         ));
-        System.out.println("Created tasks: " + task1 + ", " + task2);
-        System.out.println("Waiting for scheduled executions...");
+        String task2 = manager.createTask(new TaskModel(
+            "generic.test",
+            Map.of("value1", false, "value2", "First"),
+            "* * * * * ?",
+            "system",
+            "rabbitmq"
+        ));
 
+        
+
+        //System.out.println("Deleting task: " + task);
+        //boolean deleted = manager.deleteTask(task, "system");
+        //System.out.println("Delete result: " + deleted);
         try {
             while (true) {
                 
-                Thread.sleep(12000);
+                Thread.sleep(1000);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
-        System.out.println("Deleting task: " + task2);
-        boolean deleted = manager.deleteTask(task2, "system");
-        System.out.println("Delete result: " + deleted);
 
-        manager.shutdown();
-        System.out.println("Scheduler demo complete.");
-
-
-
+        service.end();
+        manager.shutdown();    
     }
 }
