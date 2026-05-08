@@ -1,8 +1,10 @@
 package local.example.collectorframework;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
+import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import io.github.xseejx.collectorframework.engine.ServiceManager;
@@ -23,33 +25,50 @@ public class App
     // Executes a first service with a collector which will return arguments to pass to the server. (Only if server is avaible)
     public static void main( String[] args )
     {
-        Connector connector = new Connector("Test");;
+        JSONObject json = CollectorMetadataJsonExporter.gatherAllMetadataAsJson();
+        System.out.println(json.toJSONString());
+        if(true)
+            return;
+        Connector connector = new Connector("MY_COMPUTER");;
 
-        
         /**
          * Initialize connector to talk with server
          */
         
-            JSONObject hello = new JSONObject();
-            hello.put("type", "hello");
-            hello.put("message", connector.computerId);
-            // Sends Hello request to server with computerID
-            System.out.println("[Connector] Hello sent for ID: " + connector.computerId);
+        JSONObject hello = new JSONObject();
+        hello.put("type", "hello");
+        hello.put("message", connector.computerId);
+        // Sends Hello request to server with computerID
+        //System.out.println("[Connector] Hello sent for ID: " + connector.computerId);
 
-            JSONObject instruction  = connector.POST(hello, "/api/hello");
-            System.out.println("[Connector] Received Message: " + instruction);
-            System.out.println("[Connector] Beginning of Communication");
+        JSONObject instruction  = connector.POST(hello, "/api/hello");
+        if(instruction.get("type")==null){
+            System.err.println("[!] No server Online found");
+            return;
+        }
 
-        
+        System.out.println("[+] Received Message: " + instruction);
+
+
+
 
         TaskManager manager = new TaskManager();
         ServiceManager service = new ServiceManager();
-        int codeAction = 0;
+        boolean exit = false;
         JSONObject jsonBuilder = new JSONObject();
 
-        
+        /*
+        This next step is very important, we are going to pass to the server all of our collectors
+        But most important, we are going to pass the collector metadata
+        So we are managing creation of the collectors just from the server. (from the frontend)
+         */
+
+
+
+
+
             //TODO: Startign here:
-            while (codeAction != 3) {
+            while (!exit) {
                 jsonBuilder.clear();
                 jsonBuilder.put("type", "computer_id");
                 jsonBuilder.put("message", connector.computerId);
@@ -58,7 +77,7 @@ public class App
                 JSONObject jsonMessage = connector.GET(jsonBuilder, "/api/get_instruction");
                 System.out.println(jsonMessage.toJSONString());
                 // Do action
-                codeAction = 3;
+                exit = true;
             }
 
             service.end();
@@ -137,4 +156,33 @@ public class App
 
             
     }
+
+
+    /*public static JSONObject gatherAllMetadataAsJson() {
+        ServiceManager service = new ServiceManager();
+        List<String> collectors = service.listAvailable();
+
+        JSONObject result = new JSONObject();
+        result.put("type", "metadata_result");
+
+        JSONArray messageArray = new JSONArray();
+
+        for (String collectorName : collectors) {
+            JSONObject collectorData = new JSONObject();
+            collectorData.put("collector", collectorName);
+
+            List<String> metadataLines = service.getMetadata(collectorName);
+            JSONArray metadataArray = new JSONArray();
+            // org.json.simple.JSONArray.addAll expects a Collection
+            metadataArray.addAll(metadataLines);
+
+            collectorData.put("metadata", metadataArray);
+            messageArray.add(collectorData);
+        }
+
+        result.put("messagge", messageArray); // match the required key spelling
+        return result;
+    }*/
+
+
 }
