@@ -25,10 +25,8 @@ public class App
     // Executes a first service with a collector which will return arguments to pass to the server. (Only if server is avaible)
     public static void main( String[] args )
     {
-        JSONObject json = CollectorMetadataJsonExporter.gatherAllMetadataAsJson();
-        System.out.println(json.toJSONString());
-        if(true)
-            return;
+        JSONObject jsonMetadata = CollectorMetadataJsonExporter.gatherAllMetadataAsJson();
+
         Connector connector = new Connector("MY_COMPUTER");;
 
         /**
@@ -61,28 +59,29 @@ public class App
         This next step is very important, we are going to pass to the server all of our collectors
         But most important, we are going to pass the collector metadata
         So we are managing creation of the collectors just from the server. (from the frontend)
-         */
+        */
+
+        JSONObject metaMessage =  connector.POST(jsonMetadata, "/api/metadata");
+        //System.out.println("MetadataMessage: "+metaMessage.toJSONString());
 
 
 
+        //TODO: Startign here:
+        while (!exit) {
+            jsonBuilder.clear();
+            jsonBuilder.put("type", "computer_id");
+            jsonBuilder.put("message", connector.computerId);
 
+            // Get instructions 
+            JSONObject jsonMessage = connector.GET(jsonBuilder, "/api/get_instruction");
+            System.out.println(jsonMessage.toJSONString());
+            // Do action
+            exit = true;
+        }
 
-            //TODO: Startign here:
-            while (!exit) {
-                jsonBuilder.clear();
-                jsonBuilder.put("type", "computer_id");
-                jsonBuilder.put("message", connector.computerId);
-
-                // Get instructions 
-                JSONObject jsonMessage = connector.GET(jsonBuilder, "/api/get_instruction");
-                System.out.println(jsonMessage.toJSONString());
-                // Do action
-                exit = true;
-            }
-
-            service.end();
-            manager.shutdown();
-            System.out.println("[Connector] Communication Ended");
+        service.end();
+        manager.shutdown();
+        System.out.println("[Connector] Communication Ended");
 
 
 
@@ -156,33 +155,4 @@ public class App
 
             
     }
-
-
-    /*public static JSONObject gatherAllMetadataAsJson() {
-        ServiceManager service = new ServiceManager();
-        List<String> collectors = service.listAvailable();
-
-        JSONObject result = new JSONObject();
-        result.put("type", "metadata_result");
-
-        JSONArray messageArray = new JSONArray();
-
-        for (String collectorName : collectors) {
-            JSONObject collectorData = new JSONObject();
-            collectorData.put("collector", collectorName);
-
-            List<String> metadataLines = service.getMetadata(collectorName);
-            JSONArray metadataArray = new JSONArray();
-            // org.json.simple.JSONArray.addAll expects a Collection
-            metadataArray.addAll(metadataLines);
-
-            collectorData.put("metadata", metadataArray);
-            messageArray.add(collectorData);
-        }
-
-        result.put("messagge", messageArray); // match the required key spelling
-        return result;
-    }*/
-
-
 }

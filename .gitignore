@@ -54,3 +54,6 @@ Thumbs.db
 # Build
 build/
 dist/
+
+# Python
+**.db
