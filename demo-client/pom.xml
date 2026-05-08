@@ -52,7 +52,7 @@
         <artifactId>collector-api</artifactId>
         <version>1.0</version>
         <scope>system</scope>
-        <systemPath>${project.basedir}/libs/collector-api-1.0-SNAPSHOT.jar</systemPath>
+        <systemPath>${project.basedir}//libs/collector-api-1.0-SNAPSHOT.jar</systemPath>
     </dependency>
 
 
